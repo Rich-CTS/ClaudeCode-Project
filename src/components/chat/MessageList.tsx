@@ -1,6 +1,6 @@
 "use client";
 
-import { Message } from "ai";
+import type { UIMessage as Message } from "ai";
 import { cn } from "@/lib/utils";
 import { User, Bot, Loader2 } from "lucide-react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -28,7 +28,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
       <div className="space-y-6 max-w-4xl mx-auto w-full">
         {messages.map((message) => (
           <div
-            key={message.id || message.content}
+            key={message.id}
             className={cn(
               "flex gap-4",
               message.role === "user" ? "justify-end" : "justify-start"
@@ -53,96 +53,77 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
                   : "bg-white text-neutral-900 border border-neutral-200 shadow-sm"
               )}>
                 <div className="text-sm">
-                  {message.parts ? (
-                    <>
-                      {message.parts.map((part, partIndex) => {
-                        switch (part.type) {
-                          case "text":
-                            return message.role === "user" ? (
-                              <span key={partIndex} className="whitespace-pre-wrap">{part.text}</span>
-                            ) : (
-                              <MarkdownRenderer
-                                key={partIndex}
-                                content={part.text}
-                                className="prose-sm"
-                              />
-                            );
-                          case "reasoning":
-                            return (
-                              <div key={partIndex} className="mt-3 p-3 bg-white/50 rounded-md border border-neutral-200">
-                                <span className="text-xs font-medium text-neutral-600 block mb-1">Reasoning</span>
-                                <span className="text-sm text-neutral-700">{part.reasoning}</span>
-                              </div>
-                            );
-                          case "tool-invocation":
-                            const tool = part.toolInvocation;
-                            const toolLabel = (() => {
-                              const args = tool.args as Record<string, string> | undefined;
-                              const cmd = args?.command;
-                              const path = args?.path?.split("/").pop() ?? args?.path;
-                              const oldPath = args?.old_path?.split("/").pop();
-                              const newPath = args?.new_path?.split("/").pop();
-                              if (tool.toolName === "str_replace_editor") {
-                                if (cmd === "create") return `Creating ${path}`;
-                                if (cmd === "str_replace" || cmd === "insert") return `Editing ${path}`;
-                                if (cmd === "view") return `Reading ${path}`;
-                              }
-                              if (tool.toolName === "file_manager") {
-                                if (cmd === "delete") return `Deleting ${path}`;
-                                if (cmd === "rename") return `Renaming ${oldPath} → ${newPath}`;
-                              }
-                              return tool.toolName;
-                            })();
-                            return (
-                              <div key={partIndex} className="inline-flex items-center gap-2 mt-2 px-3 py-1.5 bg-neutral-50 rounded-lg text-xs font-mono border border-neutral-200">
-                                {tool.state === "result" && tool.result ? (
-                                  <>
-                                    <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                                    <span className="text-neutral-700">{toolLabel}</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
-                                    <span className="text-neutral-700">{toolLabel}</span>
-                                  </>
-                                )}
-                              </div>
-                            );
-                          case "source":
-                            return (
-                              <div key={partIndex} className="mt-2 text-xs text-neutral-500">
-                                Source: {JSON.stringify(part.source)}
-                              </div>
-                            );
-                          case "step-start":
-                            return partIndex > 0 ? <hr key={partIndex} className="my-3 border-neutral-200" /> : null;
-                          default:
-                            return null;
-                        }
-                      })}
-                      {isLoading &&
-                        message.role === "assistant" &&
-                        messages.indexOf(message) === messages.length - 1 && (
-                          <div className="flex items-center gap-2 mt-3 text-neutral-500">
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            <span className="text-sm">Generating...</span>
+                  <>
+                    {message.parts.map((part, partIndex) => {
+                      if (part.type === "text") {
+                        return message.role === "user" ? (
+                          <span key={partIndex} className="whitespace-pre-wrap">{part.text}</span>
+                        ) : (
+                          <MarkdownRenderer
+                            key={partIndex}
+                            content={part.text}
+                            className="prose-sm"
+                          />
+                        );
+                      }
+                      if (part.type === "reasoning") {
+                        return (
+                          <div key={partIndex} className="mt-3 p-3 bg-white/50 rounded-md border border-neutral-200">
+                            <span className="text-xs font-medium text-neutral-600 block mb-1">Reasoning</span>
+                            <span className="text-sm text-neutral-700">{part.text}</span>
                           </div>
-                        )}
-                    </>
-                  ) : message.content ? (
-                    message.role === "user" ? (
-                      <span className="whitespace-pre-wrap">{message.content}</span>
-                    ) : (
-                      <MarkdownRenderer content={message.content} className="prose-sm" />
-                    )
-                  ) : isLoading &&
-                    message.role === "assistant" &&
-                    messages.indexOf(message) === messages.length - 1 ? (
-                    <div className="flex items-center gap-2 text-neutral-500">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      <span className="text-sm">Generating...</span>
-                    </div>
-                  ) : null}
+                        );
+                      }
+                      if (part.type.startsWith("tool-") || part.type === "dynamic-tool") {
+                        const toolName = part.type === "dynamic-tool" ? (part as any).toolName : part.type.replace(/^tool-/, "");
+                        const input = (part as any).input as Record<string, string> | undefined;
+                        const cmd = input?.command;
+                        const path = input?.path?.split("/").pop() ?? input?.path;
+                        const oldPath = input?.old_path?.split("/").pop();
+                        const newPath = input?.new_path?.split("/").pop();
+                        const toolLabel = (() => {
+                          if (toolName === "str_replace_editor") {
+                            if (cmd === "create") return `Creating ${path}`;
+                            if (cmd === "str_replace" || cmd === "insert") return `Editing ${path}`;
+                            if (cmd === "view") return `Reading ${path}`;
+                          }
+                          if (toolName === "file_manager") {
+                            if (cmd === "delete") return `Deleting ${path}`;
+                            if (cmd === "rename") return `Renaming ${oldPath} → ${newPath}`;
+                          }
+                          return toolName;
+                        })();
+                        const isDone = (part as any).state === "output-available" || (part as any).state === "output-error";
+                        return (
+                          <div key={partIndex} className="inline-flex items-center gap-2 mt-2 px-3 py-1.5 bg-neutral-50 rounded-lg text-xs font-mono border border-neutral-200">
+                            {isDone ? (
+                              <>
+                                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                <span className="text-neutral-700">{toolLabel}</span>
+                              </>
+                            ) : (
+                              <>
+                                <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
+                                <span className="text-neutral-700">{toolLabel}</span>
+                              </>
+                            )}
+                          </div>
+                        );
+                      }
+                      if (part.type === "step-start") {
+                        return partIndex > 0 ? <hr key={partIndex} className="my-3 border-neutral-200" /> : null;
+                      }
+                      return null;
+                    })}
+                    {isLoading &&
+                      message.role === "assistant" &&
+                      messages.indexOf(message) === messages.length - 1 && (
+                        <div className="flex items-center gap-2 mt-3 text-neutral-500">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <span className="text-sm">Generating...</span>
+                        </div>
+                      )}
+                  </>
                 </div>
               </div>
             </div>
