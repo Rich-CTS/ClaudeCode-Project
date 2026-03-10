@@ -1,0 +1,33 @@
+name: Claude PR Review
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review this pull request and check for anything that could cause irreparable damage, including:
+
+            - Breaking changes to APIs or interfaces
+            - Destructive database migrations (dropping tables/columns, data loss)
+            - Removal of critical features or auth/security logic
+            - Dependency changes that could break the app
+            - Security vulnerabilities or unsafe patterns
+            - Unhandled edge cases that could cause data corruption
+
+            Post detailed review comments on the specific lines of concern. If nothing critical is found, confirm the PR looks safe to merge.
