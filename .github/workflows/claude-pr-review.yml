@@ -17,36 +17,53 @@ jobs:
           fetch-depth: 0
 
       - name: Get PR diff
-        id: diff
-        run: |
-          git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
-          echo "diff_size=$(wc -c < pr_diff.txt)" >> $GITHUB_OUTPUT
+        run: git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
 
       - name: Review with Claude
         id: claude_review
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          DIFF=$(cat pr_diff.txt | head -c 10000)
-          ESCAPED_DIFF=$(echo "$DIFF" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
+          python3 << 'EOF'
+          import os, json, urllib.request
 
-          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d "{
-              \"model\": \"claude-sonnet-4-6\",
-              \"max_tokens\": 1024,
-              \"messages\": [{
-                \"role\": \"user\",
-                \"content\": \"Review this pull request diff and check for anything that could cause irreparable damage, including: breaking changes to APIs or interfaces, destructive database migrations, removal of critical auth/security logic, dependency changes that could break the app, security vulnerabilities, or unhandled edge cases that could cause data corruption. Be concise. If nothing critical is found, say the PR looks safe to merge.\\n\\nDiff:\\n\" $ESCAPED_DIFF
+          with open("pr_diff.txt") as f:
+              diff = f.read()[:10000]
+
+          payload = {
+              "model": "claude-sonnet-4-6",
+              "max_tokens": 1024,
+              "messages": [{
+                  "role": "user",
+                  "content": (
+                      "Review this pull request diff and check for anything that could cause irreparable damage, including: "
+                      "breaking changes to APIs or interfaces, destructive database migrations, removal of critical auth/security logic, "
+                      "dependency changes that could break the app, security vulnerabilities, or unhandled edge cases that could cause data corruption. "
+                      "Be concise. If nothing critical is found, say the PR looks safe to merge.\n\nDiff:\n" + diff
+                  )
               }]
-            }")
+          }
 
-          REVIEW=$(echo "$RESPONSE" | python3 -c "import sys,json; data=json.load(sys.stdin); print(data['content'][0]['text'])" 2>/dev/null || echo "Failed to parse Claude response")
-          echo "review<<EOF" >> $GITHUB_OUTPUT
-          echo "$REVIEW" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          req = urllib.request.Request(
+              "https://api.anthropic.com/v1/messages",
+              data=json.dumps(payload).encode(),
+              headers={
+                  "x-api-key": os.environ["ANTHROPIC_API_KEY"],
+                  "anthropic-version": "2023-06-01",
+                  "content-type": "application/json"
+              }
+          )
+
+          with urllib.request.urlopen(req) as res:
+              data = json.loads(res.read())
+
+          review = data["content"][0]["text"]
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("review<<EOF\n")
+              f.write(review + "\n")
+              f.write("EOF\n")
+          EOF
 
       - name: Post review comment
         uses: actions/github-script@v7
