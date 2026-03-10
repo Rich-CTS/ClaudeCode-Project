@@ -1,4 +1,5 @@
 import { anthropic } from "@ai-sdk/anthropic";
+import type { LanguageModel } from "ai";
 import {
   LanguageModelV1,
   LanguageModelV1StreamPart,
@@ -12,6 +13,7 @@ export class MockLanguageModel implements LanguageModelV1 {
   readonly provider = "mock";
   readonly modelId: string;
   readonly defaultObjectGenerationMode = "tool" as const;
+  readonly supportedUrls: Record<string, RegExp[]> = {};
 
   constructor(modelId: string) {
     this.modelId = modelId;
@@ -506,13 +508,13 @@ export default function App() {
   }
 }
 
-export function getLanguageModel() {
+export function getLanguageModel(): LanguageModel {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
   if (!apiKey || apiKey.trim() === "") {
     console.log("No ANTHROPIC_API_KEY found, using mock provider");
-    return new MockLanguageModel("mock-claude-sonnet-4-0");
+    return new MockLanguageModel("mock-claude-sonnet-4-0") as unknown as LanguageModel;
   }
 
-  return anthropic(MODEL);
+  return anthropic(MODEL) as unknown as LanguageModel;
 }

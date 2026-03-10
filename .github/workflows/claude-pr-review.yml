@@ -67,9 +67,11 @@ jobs:
 
       - name: Post review comment
         uses: actions/github-script@v7
+        env:
+          REVIEW: ${{ steps.claude_review.outputs.review }}
         with:
           script: |
-            const review = `${{ steps.claude_review.outputs.review }}`;
+            const review = process.env.REVIEW;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
