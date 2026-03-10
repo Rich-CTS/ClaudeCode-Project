@@ -65,6 +65,54 @@ Open [http://localhost:3000](http://localhost:3000)
 - Prisma with SQLite
 - Anthropic Claude AI
 - Vercel AI SDK
-test change
- 
- 
+
+## GitHub Basics
+
+### First-time setup
+```bash
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+git push -u origin master:main --force
+```
+
+### Daily workflow
+```bash
+# Check what files have changed
+git status
+
+# Stage changes
+git add .
+
+# Commit with a message
+git commit -m "Describe what you changed"
+
+# Push to GitHub
+git push origin HEAD:main
+```
+
+### Working with branches
+```bash
+# Create and switch to a new branch
+git checkout -b my-feature-branch
+
+# Push the branch to GitHub
+git push origin my-feature-branch
+
+# Switch back to master
+git checkout master
+```
+
+### Pull requests
+1. Push your branch to GitHub
+2. Go to the repo on github.com — you'll see a prompt to open a PR
+3. Add a title and description, then click **Create pull request**
+4. Claude will automatically review the PR and post a comment
+5. Once approved, click **Merge pull request**
+
+### Secrets (API keys)
+Store sensitive values in **Settings → Secrets and variables → Actions** — never hardcode them in your code or workflow files. Reference them in workflows as `${{ secrets.SECRET_NAME }}`.
+
+### Keeping your local repo in sync
+```bash
+# Pull latest changes from GitHub
+git pull origin main
+```
