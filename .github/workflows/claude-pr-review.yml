@@ -3,8 +3,6 @@ name: Claude PR Review
 permissions:
   contents: read
   pull-requests: write
-  issues: write
-  id-token: write
 
 on:
   pull_request:
@@ -18,18 +16,46 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: anthropics/claude-code-action@beta
+      - name: Get PR diff
+        id: diff
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
+          echo "diff_size=$(wc -c < pr_diff.txt)" >> $GITHUB_OUTPUT
+
+      - name: Review with Claude
+        id: claude_review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          DIFF=$(cat pr_diff.txt | head -c 10000)
+          ESCAPED_DIFF=$(echo "$DIFF" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "{
+              \"model\": \"claude-sonnet-4-6\",
+              \"max_tokens\": 1024,
+              \"messages\": [{
+                \"role\": \"user\",
+                \"content\": \"Review this pull request diff and check for anything that could cause irreparable damage, including: breaking changes to APIs or interfaces, destructive database migrations, removal of critical auth/security logic, dependency changes that could break the app, security vulnerabilities, or unhandled edge cases that could cause data corruption. Be concise. If nothing critical is found, say the PR looks safe to merge.\\n\\nDiff:\\n\" $ESCAPED_DIFF
+              }]
+            }")
+
+          REVIEW=$(echo "$RESPONSE" | python3 -c "import sys,json; data=json.load(sys.stdin); print(data['content'][0]['text'])" 2>/dev/null || echo "Failed to parse Claude response")
+          echo "review<<EOF" >> $GITHUB_OUTPUT
+          echo "$REVIEW" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Post review comment
+        uses: actions/github-script@v7
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          prompt: |
-            Review this pull request and check for anything that could cause irreparable damage, including:
-
-            - Breaking changes to APIs or interfaces
-            - Destructive database migrations (dropping tables/columns, data loss)
-            - Removal of critical features or auth/security logic
-            - Dependency changes that could break the app
-            - Security vulnerabilities or unsafe patterns
-            - Unhandled edge cases that could cause data corruption
-
-            Post detailed review comments on the specific lines of concern. If nothing critical is found, confirm the PR looks safe to merge.
+          script: |
+            const review = `${{ steps.claude_review.outputs.review }}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `### Claude PR Review\n\n${review}`
+            });
